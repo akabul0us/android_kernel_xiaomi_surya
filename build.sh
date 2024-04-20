@@ -4,10 +4,33 @@
 # Copyright (C) 2020-2021 Adithya R.
 
 SECONDS=0 # builtin bash timer
-ZIPNAME="uvite-$(date '+%Y%m%d-%H%M')-surya.zip"
-TC_DIR="$(pwd)/tc/clang-r498229"
-AK3_DIR="$(pwd)/android/AnyKernel3"
-DEFCONFIG="surya_defconfig"
+ZIPNAME="spiderblood-surya-$(date '+%Y%m%d-%H%M').zip"
+TC_DIR="$HOME/tc/clang-r498229"
+AK3_DIR="$HOME/AnyKernel3"
+DEFCONFIG="spiderblood_defconfig"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+info() {
+	local message="$1"
+	echo -e "$GREEN${message}$NC"
+}
+
+task() {
+	local message="$1"
+	echo -e "$YELLOW${message}$NC"
+}
+
+error() {
+	local message="$1"
+	echo -e "$RED${message}$NC"
+}
+
+clear
+info "--- Kernel Build Script ---"
 
 if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
    head=$(git rev-parse --verify HEAD 2>/dev/null); then
@@ -16,10 +39,18 @@ fi
 
 export PATH="$TC_DIR/bin:$PATH"
 
+if ! [ -f "out/.config" ]; then
+	task "\n[*] Creating config file..."
+	mkdir -p out
+	make O=out ARCH=arm64 $DEFCONFIG
+else
+	info "\n[i] Using existing config file!"
+fi
+
 if ! [ -d "$TC_DIR" ]; then
-	echo "AOSP clang not found! Cloning to $TC_DIR..."
+	task "\n[*] AOSP clang not found! Cloning to $TC_DIR...\n"
 	if ! git clone --depth=1 -b 17 https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone "$TC_DIR"; then
-		echo "Cloning failed! Aborting..."
+		error "\nCloning failed! Aborting..."
 		exit 1
 	fi
 fi
@@ -27,14 +58,14 @@ fi
 if [[ $1 = "-r" || $1 = "--regen" ]]; then
 	make O=out ARCH=arm64 $DEFCONFIG savedefconfig
 	cp out/defconfig arch/arm64/configs/$DEFCONFIG
-	echo -e "\nSuccessfully regenerated defconfig at $DEFCONFIG"
+	info "\n[i] Successfully regenerated defconfig at $DEFCONFIG"
 	exit
 fi
 
 if [[ $1 = "-rf" || $1 = "--regen-full" ]]; then
 	make O=out ARCH=arm64 $DEFCONFIG
 	cp out/.config arch/arm64/configs/$DEFCONFIG
-	echo -e "\nSuccessfully regenerated full defconfig at $DEFCONFIG"
+	info "\n[i] Successfully regenerated full defconfig at $DEFCONFIG"
 	exit
 fi
 
@@ -42,34 +73,38 @@ if [[ $1 = "-c" || $1 = "--clean" ]]; then
 	rm -rf out
 fi
 
-mkdir -p out
-make O=out ARCH=arm64 $DEFCONFIG
+if [[ $1 = "-m" || $1 = "--menuconfig" ]]; then
+	make O=out ARCH=arm64 menuconfig
+fi
 
-echo -e "\nStarting compilation...\n"
-make -j$(nproc --all) O=out ARCH=arm64 CC=clang LD=ld.lld AS=llvm-as AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1 Image.gz dtbo.img
+task "\n[*] Starting compilation...\n"
+make -j$(nproc --all) O=out CCACHE=true ARCH=arm64 CC=clang LD=ld.lld AS=llvm-as AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1 Image.gz dtbo.img
+
+task "\n[*] Installing modules...\n"
+make -j$(nproc --all) INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 O=out ARCH=arm64 CC=clang LD=ld.lld AS=llvm-as AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1 modules
+make -j$(nproc --all) INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 O=out ARCH=arm64 CC=clang LD=ld.lld AS=llvm-as AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1 modules_install
 
 kernel="out/arch/arm64/boot/Image.gz"
 dtbo="out/arch/arm64/boot/dtbo.img"
+cpath=`pwd`
 
 if [ -f "$kernel" ]; then
-	echo -e "\nKernel compiled succesfully! Zipping up...\n"
-	if [ -d "$AK3_DIR" ]; then
-		cp -r $AK3_DIR AnyKernel3
-	elif ! git clone -q https://github.com/CHRISL7/AnyKernel3 -b master-surya; then
-		echo -e "\nAnyKernel3 repo not found locally and couldn't clone from GitHub! Aborting..."
+	info "\n[i] Kernel compiled succesfully! Zipping up...\n"
+
+	if ! [ -d "$AK3_DIR" ]; then
+		error "\n[!] No folder - $AK3_DIR"
 		exit 1
 	fi
-	cp $kernel $dtbo AnyKernel3
+
+	cp $kernel $dtbo $AK3_DIR
 	rm -rf out/arch/arm64/boot
-	cd AnyKernel3
-	git checkout master-surya &> /dev/null
-	zip -r9 "../$ZIPNAME" * -x .git README.md *placeholder
-	cd ..
-	rm -rf AnyKernel3
-	echo -e "\nCompleted in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s) !"
-	echo "Zip: $ZIPNAME"
+	cd $AK3_DIR
+	zip -r9 "$ZIPNAME" * -x .git README.md *placeholder
+	mv "$ZIPNAME" $cpath
+	cd -
+	info "\n[i] Completed in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s) !"
+	info "\n[i] Generated $cpath/$ZIPNAME\n"
 else
-	echo -e "\nCompilation failed!"
+	error "\n[!] Compilation failed!"
 	exit 1
 fi
-
