@@ -9,6 +9,8 @@ Customized kernel for Xiaomi Poco X3 NFC
 - Ethernet adapters support
 - SDR support
 - USB HID support
+- NFS server and client support
+- KernelSU support
 
 ![new](https://github.com/cr4sh-me/android_kernel_xiaomi_surya/assets/111238843/5c92ab6f-33e1-49fc-abfc-46fedf23b3c6)
 
