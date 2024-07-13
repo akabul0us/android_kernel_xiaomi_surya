@@ -1145,6 +1145,14 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			goto release_mutex;
 		}
 
+		if (s_ctrl->is_mipi_switch == 1) {
+			rc = cam_sensor_core_mipi_switch(power_info, &s_ctrl->soc_info, 1);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR, "mipi switch is failed:%d", rc);
+				goto release_mutex;
+			}
+		}
+
 		if (s_ctrl->i2c_data.streamon_settings.is_settings_valid &&
 			(s_ctrl->i2c_data.streamon_settings.request_id == 0)) {
 			rc = cam_sensor_apply_settings(s_ctrl, 0,
@@ -1169,6 +1177,14 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			"Not in right state to stop : %d",
 			s_ctrl->sensor_state);
 			goto release_mutex;
+		}
+
+		if (s_ctrl->is_mipi_switch == 1) {
+			rc = cam_sensor_core_mipi_switch(power_info, &s_ctrl->soc_info, 0);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR, "mipi switch is failed:%d", rc);
+				goto release_mutex;
+			}
 		}
 
 		if (s_ctrl->i2c_data.streamoff_settings.is_settings_valid &&
@@ -1250,6 +1266,98 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			}
 			s_ctrl->sensor_state = CAM_SENSOR_CONFIG;
 		}
+	}
+		break;
+	case CAM_UPDATE_REG: {
+		struct cam_sensor_i2c_reg_setting user_reg_setting;
+		struct cam_sensor_i2c_reg_array *i2c_reg_setting = NULL;
+		int i;
+
+		rc = copy_from_user(&user_reg_setting, (void __user *)cmd->handle, sizeof(user_reg_setting));
+		if (rc < 0) {
+			CAM_ERR(CAM_SENSOR, "Copy data from user space failed\n");
+			goto release_mutex;
+		}
+
+		CAM_DBG(CAM_SENSOR, "CAM_UPDATE_REG reg setting size = %d", user_reg_setting.size);
+		i2c_reg_setting = kzalloc(sizeof(struct cam_sensor_i2c_reg_array) *
+			user_reg_setting.size, GFP_KERNEL);
+		if (!i2c_reg_setting) {
+			rc = -ENOMEM;
+			CAM_ERR(CAM_SENSOR, "kzalloc memory failed\n");
+			goto release_mutex;
+		}
+
+		rc = copy_from_user(i2c_reg_setting, (void __user *)user_reg_setting.reg_setting,
+			sizeof(struct cam_sensor_i2c_reg_array) * user_reg_setting.size);
+		if (rc < 0) {
+			CAM_ERR(CAM_SENSOR, "Copy i2c setting from user space failed\n");
+			kfree(i2c_reg_setting);
+			goto release_mutex;
+		}
+		user_reg_setting.reg_setting = i2c_reg_setting;
+
+		for (i = 0; i < user_reg_setting.size; i++) {
+			CAM_DBG(CAM_SENSOR, "CAM_UPDATE_REG reg_addr=0x%x, reg_value=0x%x",
+				i2c_reg_setting[i].reg_addr, i2c_reg_setting[i].reg_data);
+		}
+
+		rc = camera_io_dev_write(&s_ctrl->io_master_info, &user_reg_setting);
+		if (rc < 0)
+			CAM_ERR(CAM_SENSOR, "Write setting failed, rc = %d\n", rc);
+
+		kfree(i2c_reg_setting);
+	}
+		break;
+	case CAM_READ_REG: {
+		struct cam_sensor_i2c_reg_setting user_reg_setting;
+		struct cam_sensor_i2c_reg_array *i2c_reg_setting;
+		int ret = 0;
+		int i;
+
+		rc = copy_from_user(&user_reg_setting, (void __user *)cmd->handle, sizeof(user_reg_setting));
+		if (rc < 0) {
+			CAM_ERR(CAM_SENSOR, "Copy data from user space failed");
+			goto release_mutex;
+		}
+
+		CAM_DBG(CAM_SENSOR, "CAM_READ_REG reg setting size = %d", user_reg_setting.size);
+		i2c_reg_setting = kzalloc(sizeof(struct cam_sensor_i2c_reg_array) *
+			user_reg_setting.size, GFP_KERNEL);
+		if (!i2c_reg_setting) {
+			rc = -ENOMEM;
+			CAM_ERR(CAM_SENSOR, "kzalloc memory failed\n");
+			goto release_mutex;
+		}
+
+		rc = copy_from_user(i2c_reg_setting, (void __user *)user_reg_setting.reg_setting,
+			sizeof(struct cam_sensor_i2c_reg_array) * user_reg_setting.size);
+		if (rc < 0) {
+			CAM_ERR(CAM_SENSOR, "Copy i2c setting from user space failed");
+			kfree(i2c_reg_setting);
+			goto release_mutex;
+		}
+
+		for (i = 0; i < user_reg_setting.size; i++) {
+			ret += camera_io_dev_read(
+				&(s_ctrl->io_master_info),
+				i2c_reg_setting[i].reg_addr,
+				&i2c_reg_setting[i].reg_data, user_reg_setting.addr_type,
+				user_reg_setting.data_type);
+			CAM_DBG(CAM_SENSOR, "CAM_READ_REG reg_addr=0x%x, reg_value=0x%x, sid = 0x%x",
+				i2c_reg_setting[i].reg_addr, i2c_reg_setting[i].reg_data, s_ctrl->io_master_info.cci_client->sid);
+		}
+
+		if (copy_to_user((void __user *)user_reg_setting.reg_setting, i2c_reg_setting,
+			sizeof(struct cam_sensor_i2c_reg_array) * user_reg_setting.size) || ret != 0) {
+			CAM_ERR(CAM_SENSOR, "Copy data to user space failed");
+			rc = -EFAULT;
+		}
+		if (copy_to_user((void __user *)cmd->handle, &user_reg_setting, sizeof(user_reg_setting)) || ret != 0) {
+			CAM_ERR(CAM_SENSOR, "Copy data to user space failed");
+			rc = -EFAULT;
+		}
+		kfree(i2c_reg_setting);
 	}
 		break;
 	default:
