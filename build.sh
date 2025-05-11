@@ -7,7 +7,7 @@ SECONDS=0 # builtin bash timer
 ZIPNAME="uvite-$(date '+%Y%m%d-%H%M')-surya.zip"
 TC_DIR="$(pwd)/tc/clang-r498229"
 AK3_DIR="$(pwd)/android/AnyKernel3"
-DEFCONFIG="surya_defconfig"
+DEFCONFIG="spiderblood_defconfig"
 
 if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
    head=$(git rev-parse --verify HEAD 2>/dev/null); then
