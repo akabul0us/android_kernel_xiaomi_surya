@@ -396,7 +396,13 @@ struct ieee80211_supported_band {
 	u16 n_iftype_data;
 	const struct ieee80211_sband_iftype_data *iftype_data;
 };
-
+#ifdef CONFIG_OF
+void wiphy_read_of_freq_limits(struct wiphy *wiphy);
+#else /* CONFIG_OF */
+static inline void wiphy_read_of_freq_limits(struct wiphy *wiphy)
+{
+}
+#endif /* !CONFIG_OF */
 /**
  * ieee80211_get_sband_iftype_data - return sband data for a given iftype
  * @sband: the sband to search for the STA on

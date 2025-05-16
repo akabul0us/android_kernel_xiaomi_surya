@@ -1,0 +1,18 @@
+config NEW_REALTEK
+        bool "New Realtek wifi family"
+        default n
+        ---help---
+	  This option will enable support for the Realtek mac80211-based
+	  wireless drivers. Drivers rtl8188eus/eu/etv, rtl8192eu, rtl8192fu, rtl8812au/rtl8821au, rtl8812bu, rtl8814au.
+
+if NEW_REALTEK
+
+source "drivers/net/wireless/realtek/newrtl/rtl8188eus/Kconfig"
+source "drivers/net/wireless/realtek/newrtl/rtl8188fu/Kconfig"
+source "drivers/net/wireless/realtek/newrtl/rtl8192eu/Kconfig"
+source "drivers/net/wireless/realtek/newrtl/rtl8192fu/Kconfig"
+source "drivers/net/wireless/realtek/newrtl/rtl8812au/Kconfig"
+source "drivers/net/wireless/realtek/newrtl/rtl8812bu/Kconfig"
+source "drivers/net/wireless/realtek/newrtl/rtl8814au/Kconfig"
+
+endif
