@@ -63,6 +63,7 @@ modules.builtin
 # Ignored Paths
 out/
 tc/
+compiled-modules/
 log.txt
 *.zip
 #
